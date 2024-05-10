@@ -48,3 +48,13 @@ line: 8 | And having perhaps the better claim,
 line: 9 | Because it was grassy and wanted wear;
 line: 13 | And both that morning equally lay
 ```
+## TODO List
+- [X] Basic search
+- [X] Register sensivity
+- [X] Only full words sensivity
+- [X] Full test coverage 
+- [ ] Max count output lines
+- [ ] Invert match
+- [ ] Only full lines sensitivity
+- [ ] Basic regular expressions support
+- [ ] Find search items more than in 1 file at a time  
