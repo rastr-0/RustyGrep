@@ -1,7 +1,7 @@
 # RustyGrep
 ## Description
 RustyGrep is a command-line tool written in Rust that implements basic search functionality.
-The final main goal is RustyGrep to be more or less similar to functionality to Unix "grep".
+The final main goal is RustyGrep to be more or less similar in its functionality to Unix "grep".
 Found words or the parts of words are colored in red.
 ## Usage
 To usage the utility navigate to the project directory and run the following command:
