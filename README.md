@@ -5,8 +5,8 @@ The final main goal is RustyGrep to be more or less similar to functionality to 
 Found words or the parts of words are colored in red.
 ## Usage
 To usage the utility navigate to the project directory and run the following command:
-cargo run <search_item> <file_path>
-There are also available 2 environment variables: FULL_WORDS and IGNORE_CASE. Set them to 1, if you want them to be on.
+```cargo run <search_item> <file_path>```
+There are also available 2 environment variables: ```FULL_WORDS``` and ```IGNORE_CASE```. Set them to 1, if you want them to be on.
 ## Examples
 poem.txt file:
 ```
