@@ -3,12 +3,15 @@ use std::error::Error;
 use std::env;
 use colored::Colorize;
 use regex::Regex;
+use Option::Some;
 
 pub struct Config {
     pub query: String,
     pub file_path: String,
+    // additional parameters
     pub is_case_insensitive: bool,
-    pub find_only_full_words: bool
+    pub find_only_full_words: bool,
+    pub max_output: Option<u32>,
 }
 
 impl Config {
@@ -21,11 +24,32 @@ impl Config {
             return Err("Not enough minimum arguments provided: \
                        you should provide 2 more: query and file_path");
         }
+
+        // env::var returns Result<String, VarError> type
+        let max_output_val = match env::var("MAX_OUTPUT") {
+            // if it's a String type
+            Ok(val) => {
+                // try to convert String type to u32
+                match val.parse::<u32>() {
+                    // if it's a valid u32 value -> return it
+                    Ok(parsed_val) => Some(parsed_val),
+                    // if not, return None
+                    Err(_) => {
+                        eprintln!("MAX_OUTPUT variable is not a valid u32 value!");
+                        None
+                    }
+                }
+            },
+            // if it's a VarError type, return None
+            Err(_) => None
+        };
+
         return Ok(Config {
             query: args[1].to_string(),
             file_path: args[2].to_string(),
             is_case_insensitive: env::var("IGNORE_CASE").is_ok(),
             find_only_full_words: env::var("FULL_WORDS").is_ok(),
+            max_output: max_output_val,
         });
     }
 }
@@ -38,16 +62,16 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
         // case_insensitive + not full_words
     let results = if config.is_case_insensitive == true && config.find_only_full_words == false {
-        search_case_insensitive(&config.query, &content)
+        search_case_insensitive(&config.query, &content, &config.max_output)
         // not case_insensitive + not full_words
     } else if config.is_case_insensitive == false && config.find_only_full_words == false {
-        search_case_sensitive(&config.query, &content)
+        search_case_sensitive(&config.query, &content, &config.max_output)
         // not case_insensitive + full_words
     } else if config.is_case_insensitive == false && config.find_only_full_words == true{
-        search_words_case_sensitive(&config.query, &content)
+        search_words_case_sensitive(&config.query, &content, &config.max_output)
         // case_insensitive + full_words
     } else {
-        search_words_case_insensitive(&config.query, &content)
+        search_words_case_insensitive(&config.query, &content, &config.max_output)
     };
 
     for line in results.iter() {
@@ -56,14 +80,17 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-
-pub fn search_case_sensitive(query: &str, content: &str) -> Vec<(u32, String)> {
+// query doesn't have an explicit lifetime, because we need to return
+// a vector containing a slice of content string: then lifetimes of Vec<&str>
+// and content &str must be the same, which guarantees that Vec<&str> lives
+// just long enough as a content.
+pub fn search_case_sensitive(query: &str, content: &str, max_count: &Option<u32>) -> Vec<(u32, String)> {
     let mut results = Vec::new();
     let mut line_number = 0;
 
     for line in content.lines() {
         line_number += 1;
-        if line.contains(query) {
+        if line.contains(query) && results.len() < max_count.unwrap_or(u32::MAX) as usize {
             if let Some(index) = line.find(query) {
                 let mut colored_line = String::new();
                 // coloring found query in line
@@ -78,7 +105,7 @@ pub fn search_case_sensitive(query: &str, content: &str) -> Vec<(u32, String)> {
     results
 }
 
-pub fn search_case_insensitive(query: &str, content: &str) -> Vec<(u32, String)> {
+pub fn search_case_insensitive(query: &str, content: &str, max_count: &Option<u32>) -> Vec<(u32, String)> {
     let mut results = Vec::new();
     let lowercase_query = query.to_lowercase();
     let mut line_number = 0;
@@ -88,7 +115,9 @@ pub fn search_case_insensitive(query: &str, content: &str) -> Vec<(u32, String)>
 
         line_number += 1;
 
-        if lowercase_line.contains(&lowercase_query) {
+        if lowercase_line.contains(&lowercase_query) &&
+            results.len() < max_count.unwrap_or(u32::MAX) as usize {
+
             if let Some(index) = lowercase_line.find(lowercase_query.as_str()) {
                 let mut colored_line = String::new();
                 // coloring found query in line
@@ -103,7 +132,7 @@ pub fn search_case_insensitive(query: &str, content: &str) -> Vec<(u32, String)>
     results
 }
 
-pub fn search_words_case_sensitive(query: &str, content: &str) -> Vec<(u32, String)> {
+pub fn search_words_case_sensitive(query: &str, content: &str, max_count: &Option<u32>) -> Vec<(u32, String)> {
     let mut results = Vec::new();
 
     let pattern = format!(r"\b{}\b", regex::escape(query));
@@ -128,14 +157,14 @@ pub fn search_words_case_sensitive(query: &str, content: &str) -> Vec<(u32, Stri
         }
         // if we found word that contains query and is full
         // return this line
-        if last_end > 0 {
+        if last_end > 0 && results.len() < max_count.unwrap_or(u32::MAX) as usize {
             results.push((number as u32 + 1_u32, colored_result));
         }
     }
     results
 }
 
-pub fn search_words_case_insensitive(query: &str, content: &str) -> Vec<(u32, String)> {
+pub fn search_words_case_insensitive(query: &str, content: &str, max_count: &Option<u32>) -> Vec<(u32, String)> {
     let mut results = Vec::new();
 
     let pattern = format!(r"\b{}\b", regex::escape(&query.to_lowercase()));
@@ -158,9 +187,9 @@ pub fn search_words_case_insensitive(query: &str, content: &str) -> Vec<(u32, St
                 last_end = end;
             }
         }
-        // if we found word that contains query and is full
-        // return this line
-        if last_end > 0 {
+        // if we found word in line that contains query and is full
+        // add this lines to the results vector
+        if last_end > 0 && results.len() < max_count.unwrap_or(u32::MAX) as usize {
             results.push((number as u32 + 1_u32, colored_result));
         }
     }
@@ -169,12 +198,12 @@ pub fn search_words_case_insensitive(query: &str, content: &str) -> Vec<(u32, St
 
 #[cfg(test)]
 mod test {
-    use std::fmt::format;
     use super::*;
 
     #[test]
     fn case_sensitive() {
         let query = "saf";
+        let max_count = Some(1_u32);
         let content = "\
 Rust:
 safe, fast, productive.
@@ -183,12 +212,13 @@ Pick three.";
         let red_word = "saf".red().to_string();
         let rest_of_line = "e, fast, productive.".to_string();
 
-        assert_eq!(vec![(2, format!("{red_word}{rest_of_line}"))], search_case_sensitive(query, content));
+        assert_eq!(vec![(2, format!("{red_word}{rest_of_line}"))], search_case_sensitive(&query, &content, &max_count));
     }
 
     #[test]
     fn case_insensitive() {
         let query = "rUsT";
+        let max_count = Some(2_u32);
         let content = "\
 Rust:
 safe, fast, productive.
@@ -198,12 +228,13 @@ Trust me.";
         let first_occasion = format!("{}{}", "Rust".red().to_string(), ":".to_string());
         let second_occasion = "Trust me.".to_string().replace("rust", &"rust".red().to_string());
 
-        assert_eq!(vec![(1, first_occasion), (4, second_occasion)], search_case_insensitive(query, content));
+        assert_eq!(vec![(1, first_occasion), (4, second_occasion)], search_case_insensitive(&query, &content, &max_count));
     }
 
     #[test]
     fn case_sensitive_full_words() {
         let query = "rust";
+        let max_count = Some(1_u32);
         let content = "\
 rust:
 safe, fast, productive.
@@ -211,12 +242,13 @@ Pick three.
 Trust me.";
 
         assert_eq!(vec![(1, format!("{}{}", "rust".red().to_string(), ":".to_string()))],
-                   search_words_case_sensitive(&query, &content));
+                   search_words_case_sensitive(&query, &content, &max_count));
     }
 
     #[test]
     fn case_insensitive_full_words() {
         let query = "rUsT";
+        let max_count = Some(2_u32);
         let content = "\
 Rust:
 safe, fast, productive.
@@ -226,6 +258,6 @@ But i love RUST!";
 
         assert_eq!(vec![(1, format!("{}{}", "Rust".red(), ":")),
                         (5, format!("{}{}{}", "But i love ", "RUST".red(), "!"))],
-        search_case_insensitive(&query, &content));
+        search_case_insensitive(&query, &content, &max_count));
     }
 }
