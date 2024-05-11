@@ -53,7 +53,7 @@ line: 13 | And both that morning equally lay
 - [X] Register sensivity
 - [X] Only full words sensivity
 - [X] Full test coverage 
-- [ ] Max count output lines
+- [X] Max count output lines
 - [ ] Invert match
 - [ ] Only full lines sensitivity
 - [ ] Basic regular expressions support
