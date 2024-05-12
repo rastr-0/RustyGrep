@@ -1,6 +1,6 @@
 use std::env;
 use std::process;
-use untitled::{Config, run};
+use RustyGrep::{Config, run};
 
 fn main() {
     // get command line arguments with std::end::args

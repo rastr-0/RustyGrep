@@ -54,7 +54,8 @@ line: 13 | And both that morning equally lay
 - [X] Only full words sensivity
 - [X] Full test coverage 
 - [X] Max count output lines
-- [ ] Invert match
+- [X] Invert match
 - [ ] Only full lines sensitivity
 - [ ] Basic regular expressions support
 - [ ] Find search items more than in 1 file at a time  
+

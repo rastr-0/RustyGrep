@@ -1,0 +1,11 @@
+[package]
+name = "RustyGrep"
+version = "0.1.0"
+authors = "rastr-0"
+description = "Unix-like \"grep\" basic implementation with rust"
+licence = "MIT"
+edition = "2021"
+
+[dependencies]
+colored = "2.1.0"
+regex = "1.10.4"
