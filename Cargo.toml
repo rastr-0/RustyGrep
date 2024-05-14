@@ -1,7 +1,7 @@
 [package]
 name = "RustyGrep"
 version = "0.1.0"
-authors = "rastr-0"
+authors = ["Roman Milko"]
 description = "Unix-like \"grep\" basic implementation with rust"
 licence = "MIT"
 edition = "2021"

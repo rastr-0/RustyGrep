@@ -4,14 +4,17 @@ use std::env;
 use colored::Colorize;
 use regex::Regex;
 use Option::Some;
+use std::io::BufRead;
 
 pub struct Config {
+    // required parameters
     pub query: String,
     pub file_path: String,
-    // checked in the run function
+    // optional parameters, have their own functions implementations
     pub is_case_insensitive: bool,
     pub find_only_full_words: bool,
-    // have to be passed to each function
+    pub find_only_full_lines: bool,
+    // optional parameters: don't have their own function implementations
     pub max_output: Option<u32>,
     pub invert_match: bool,
 }
@@ -51,6 +54,7 @@ impl Config {
             file_path: args[2].to_string(),
             is_case_insensitive: env::var("IGNORE_CASE").is_ok(),
             find_only_full_words: env::var("FULL_WORDS").is_ok(),
+            find_only_full_lines: env::var("FULL_LINES").is_ok(),
             max_output: max_output_val,
             invert_match: env::var("INVERT_MATCH").is_ok(),
         });
@@ -84,11 +88,18 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     } else if config.is_case_insensitive == false && config.find_only_full_words == true{
         search_words_case_sensitive(&config.query, &content, &additional_params)
         // case_insensitive + full_words
-    } else {
+    } else if config.is_case_insensitive == true && config.find_only_full_words == true {
         search_words_case_insensitive(&config.query, &content, &additional_params)
+        // case_insensitive + full_lines
+    } else if config.find_only_full_lines == true && config.is_case_insensitive == true {
+        search_lines_case_insensitive(&config.query, &content, &additional_params)
+        // not case_insensitive + full_lines
+    } else {
+        search_lines_case_sensitive(&config.query, &content, &additional_params)
     };
 
     for line in results.iter() {
+        // number | match
         println!("line: {} | {}", line.0, line.1);
     }
 
@@ -111,10 +122,10 @@ fn search_case_sensitive(query: &str, content: &str, params: &AdditionalParamete
                 colored_line.push_str(&line[index..index + query.len()].red().to_string());
                 colored_line.push_str(&line[index + query.len()..]);
 
-                results.push((line_number as u32, colored_line));
+                results.push((line_number as u32 + 1u32, colored_line));
             }
         } else {
-            invert_match_results.push((line_number as u32, line.to_string()));
+            invert_match_results.push((line_number as u32 + 1u32, line.to_string()));
         }
     } if params.invert_match {
         invert_match_results
@@ -142,10 +153,10 @@ fn search_case_insensitive(query: &str, content: &str, params: &AdditionalParame
                 colored_line.push_str(&line[index..index + query.len()].red().to_string());
                 colored_line.push_str(&line[index + query.len()..]);
 
-                results.push((line_number as u32, colored_line));
+                results.push((line_number as u32 + 1u32, colored_line));
             }
         } else {
-            invert_match_results.push((line_number as u32, line.to_string()));
+            invert_match_results.push((line_number as u32 + 1u32, line.to_string()));
         }
     }
     if params.invert_match {
@@ -232,6 +243,45 @@ fn search_words_case_insensitive(query: &str, content: &str, params: &Additional
         results
     }
 }
+
+fn search_lines_case_sensitive(query: &str, content: &str, params: &AdditionalParameters) -> Vec<(u32, String)> {
+    let mut results = Vec::new();
+    let mut invert_match_results = Vec::new();
+
+    for (number, line) in content.lines().enumerate() {
+        if line == query && results.len() < params.max_output.unwrap_or(u32::MAX) as usize {
+            results.push((number as u32 + 1_u32, line.red().to_string()))
+        } else {
+            invert_match_results.push((number as u32 + 1u32, line.to_string()));
+        }
+    }
+    if params.invert_match {
+        invert_match_results
+    } else {
+        results
+    }
+}
+
+fn search_lines_case_insensitive(query: &str, content: &str, params: &AdditionalParameters) -> Vec<(u32, String)> {
+    let mut results = Vec::new();
+    let mut invert_match_results = Vec::new();
+
+    for (number, line) in content.lines().enumerate() {
+        if line.to_lowercase() == query.to_lowercase() &&
+            results.len() < params.max_output.unwrap_or(u32::MAX) as usize {
+
+            results.push((number as u32 + 1_u32, line.red().to_string()))
+        } else {
+            invert_match_results.push((number as u32 + 1u32, line.to_string()));
+        }
+    }
+    if params.invert_match {
+        invert_match_results
+    } else {
+        results
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -304,12 +354,50 @@ It's up to you.
 But i love RUST!";
 
         let params = AdditionalParameters {
-            max_output: Some(2_u32),
+            max_output: Some(3_u32),
             invert_match: false
         };
 
         assert_eq!(vec![(1, format!("{}{}", "Rust".red(), ":")),
                         (5, format!("{}{}{}", "But i love ", "RUST".red(), "!"))],
                    search_case_insensitive(&query, &content, &params));
+    }
+
+    #[test]
+    fn case_insensitive_full_lines() {
+        let query = "saFe, fAst, prodUctive.";
+        let content = "\
+Rust:
+safe, fast, productive.
+Pick three.
+It's up to you.
+But I love rust!";
+
+        let params = AdditionalParameters {
+            max_output: Some(10u32),
+            invert_match: false
+        };
+
+        assert_eq!(vec![(2, "safe, fast, productive.".red().to_string())],
+                   search_lines_case_insensitive(&query, &content, &params));
+    }
+
+    #[test]
+    fn case_sensitive_full_lines() {
+        let query = "safe, fast, productive.";
+        let content = "\
+Rust:
+safe, fast, productive.
+Pick three.
+It's up to you.
+But I love rust!";
+
+        let params = AdditionalParameters {
+            max_output: Some(10u32),
+            invert_match: false
+        };
+
+        assert_eq!(vec![(2, query.red().to_string())],
+                   search_lines_case_sensitive(&query, &content, &params));
     }
 }
