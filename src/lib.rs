@@ -20,15 +20,18 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn build(args: &[String]) -> Result<Config, &'static str> {
-        if args.len() > 1 && args.len() < 3 {
-            return Err("Not enough minimum arguments provided: \
-                        you should provide 1 more: file_path");
-        }
-        else if args.len() < 3 {
-            return Err("Not enough minimum arguments provided: \
-                       you should provide 2 more: query and file_path");
-        }
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        // skipping first not used parameter: [target/debug/RustyGrep]
+        args.next();
+
+        let query_value = match args.next() {
+            Some(value) => value,
+            None => return Err("Not enough required arguments: absent query parameter")
+        };
+        let file_path_value = match args.next() {
+            Some(value) => value,
+            None => return Err("Not enough required arguments: absent file_path parameter")
+        };
 
         // env::var returns Result<String, VarError> type
         let max_output_val = match env::var("MAX_OUTPUT") {
@@ -50,8 +53,8 @@ impl Config {
         };
 
         return Ok(Config {
-            query: args[1].to_string(),
-            file_path: args[2].to_string(),
+            query: query_value,
+            file_path: file_path_value,
             is_case_insensitive: env::var("IGNORE_CASE").is_ok(),
             find_only_full_words: env::var("FULL_WORDS").is_ok(),
             find_only_full_lines: env::var("FULL_LINES").is_ok(),
@@ -105,65 +108,64 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
-// query doesn't have an explicit lifetime, because we need to return
-// a vector containing a slice of content string: then lifetimes of Vec<&str>
-// and content &str must be the same, which guarantees that Vec<&str> lives
-// just long enough as a content.
+
 fn search_case_sensitive(query: &str, content: &str, params: &AdditionalParameters) -> Vec<(u32, String)> {
-    let mut results = Vec::new();
-    let mut invert_match_results = Vec::new();
+    content
+        .lines()
+        .enumerate()
+        .filter_map(|(line_number, line)| {
+            let match_found = line.contains(query);
 
-    for (line_number, line) in content.lines().enumerate() {
-        if line.contains(query) && results.len() < params.max_output.unwrap_or(u32::MAX) as usize {
-            if let Some(index) = line.find(query) {
-                let mut colored_line = String::new();
-                // coloring found query in line
-                colored_line.push_str(&line[..index]);
-                colored_line.push_str(&line[index..index + query.len()].red().to_string());
-                colored_line.push_str(&line[index + query.len()..]);
+            if params.invert_match {
+                if !match_found {
+                    Some((line_number as u32 + 1u32, line.to_string()))
+            } else { None }
 
-                results.push((line_number as u32 + 1u32, colored_line));
-            }
-        } else {
-            invert_match_results.push((line_number as u32 + 1u32, line.to_string()));
-        }
-    } if params.invert_match {
-        invert_match_results
-    } else {
-        results
-    }
+            } else if !params.invert_match && match_found {
+                line.find(query).map(|index| {
+                    let (before, after) = line.split_at(index);
+                    let colored_line = format!("{}{}{}", before, &after[..query.len()].red(),
+                                               &after[query.len()..]);
+
+                    (line_number as u32 + 1, colored_line)
+                })
+            } else { None }
+    })
+        .take(params.max_output.unwrap_or(u32::MAX) as usize)
+        .collect()
 }
 
 fn search_case_insensitive(query: &str, content: &str, params: &AdditionalParameters) -> Vec<(u32, String)> {
-    let mut results = Vec::new();
-    let mut invert_match_results = Vec::new();
+    content
+        // split to lines
+        .lines()
+        // each element has the following type: (usize, &str)
+        .enumerate()
+        // filter values from content
+        .filter_map(|(line_number, line)| {
+            let match_found = line.to_lowercase().contains(&query.to_lowercase());
 
-    let lowercase_query = query.to_lowercase();
+            if params.invert_match {
+                if !match_found {
+                    Some((line_number as u32 + 1u32, line.to_string()))
+                } else { None }
 
-    for (line_number, line) in content.lines().enumerate() {
-        let lowercase_line = line.to_lowercase();
-
-        if lowercase_line.contains(&lowercase_query) &&
-            results.len() < params.max_output.unwrap_or(u32::MAX) as usize {
-
-            if let Some(index) = lowercase_line.find(lowercase_query.as_str()) {
-                let mut colored_line = String::new();
-                // coloring found query in line
-                colored_line.push_str(&line[..index]);
-                colored_line.push_str(&line[index..index + query.len()].red().to_string());
-                colored_line.push_str(&line[index + query.len()..]);
-
-                results.push((line_number as u32 + 1u32, colored_line));
-            }
-        } else {
-            invert_match_results.push((line_number as u32 + 1u32, line.to_string()));
-        }
-    }
-    if params.invert_match {
-        invert_match_results
-    } else {
-        results
-    }
+            } else if !params.invert_match && match_found {
+                line.to_lowercase().find(&query.to_lowercase()).map(|index| {
+                    // this code applies only when find method results is Some(index)
+                    // if it's None, map method returns None
+                    let (before, after) = line.split_at(index);
+                    let colored_line = format!("{}{}{}", before, &after[..query.len()].red(),
+                                               &after[query.len()..]);
+                    // returns tuple (u32, String)
+                    (line_number as u32 + 1, colored_line)
+                })
+            } else { None }
+        })
+        // return only first MAX_OUTPUT lines. If variable is None, set it to u32::MAX
+        .take(params.max_output.unwrap_or(u32::MAX) as usize)
+        // collect all filtered element to the data type: Vec<u32, String>
+        .collect::<Vec<(u32, String)>>()
 }
 
 fn search_words_case_sensitive(query: &str, content: &str, params: &AdditionalParameters) -> Vec<(u32, String)> {
@@ -245,41 +247,45 @@ fn search_words_case_insensitive(query: &str, content: &str, params: &Additional
 }
 
 fn search_lines_case_sensitive(query: &str, content: &str, params: &AdditionalParameters) -> Vec<(u32, String)> {
-    let mut results = Vec::new();
-    let mut invert_match_results = Vec::new();
+    content
+        .lines()
+        .enumerate()
+        .filter_map(|(line_number, line)| {
+            let match_found = line == query;
 
-    for (number, line) in content.lines().enumerate() {
-        if line == query && results.len() < params.max_output.unwrap_or(u32::MAX) as usize {
-            results.push((number as u32 + 1_u32, line.red().to_string()))
-        } else {
-            invert_match_results.push((number as u32 + 1u32, line.to_string()));
-        }
-    }
-    if params.invert_match {
-        invert_match_results
-    } else {
-        results
-    }
+            if !params.invert_match {
+                if match_found {
+                    Some((line_number as u32 + 1u32, line.red().to_string()))
+                } else { None }
+            } else if params.invert_match {
+                if !match_found {
+                    Some((line_number as u32 + 1u32, line.to_string()))
+                } else { None }
+            } else { None }
+        })
+        .take(params.max_output.unwrap_or(u32::MAX) as usize)
+        .collect::<Vec<(u32, String)>>()
 }
 
 fn search_lines_case_insensitive(query: &str, content: &str, params: &AdditionalParameters) -> Vec<(u32, String)> {
-    let mut results = Vec::new();
-    let mut invert_match_results = Vec::new();
+    content
+        .lines()
+        .enumerate()
+        .filter_map(|(line_number, line)| {
+            let match_found = line.to_lowercase() == query.to_lowercase();
 
-    for (number, line) in content.lines().enumerate() {
-        if line.to_lowercase() == query.to_lowercase() &&
-            results.len() < params.max_output.unwrap_or(u32::MAX) as usize {
-
-            results.push((number as u32 + 1_u32, line.red().to_string()))
-        } else {
-            invert_match_results.push((number as u32 + 1u32, line.to_string()));
-        }
-    }
-    if params.invert_match {
-        invert_match_results
-    } else {
-        results
-    }
+            if !params.invert_match {
+                if match_found {
+                    Some((line_number as u32 + 1u32, line.red().to_string()))
+                } else { None }
+            } else if params.invert_match {
+                if !match_found {
+                    Some((line_number as u32 + 1u32, line.to_string()))
+                } else { None }
+            } else { None }
+        })
+        .take(params.max_output.unwrap_or(u32::MAX) as usize)
+        .collect::<Vec<(u32, String)>>()
 }
 
 #[cfg(test)]

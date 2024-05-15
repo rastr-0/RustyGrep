@@ -3,10 +3,10 @@ use std::process;
 use RustyGrep::{Config, run};
 
 fn main() {
-    // get command line arguments with std::end::args
-    let args: Vec<String> = env::args().collect();
     // parse command line arguments
-    let config = Config::build(&args).unwrap_or_else(|err| {
+    // passing env::args to build function is possible, because it takes as a parameter
+    // impl Iterator<Item = String> which is a trait of Iterator
+    let config = Config::build(env::args()).unwrap_or_else(|err| {
         eprintln!("Problem parsing arguments | {}", err);
         process::exit(1);
     });
