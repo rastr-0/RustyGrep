@@ -3,10 +3,18 @@
 RustyGrep is a command-line tool written in Rust that implements basic search functionality.
 The final main goal is RustyGrep to be more or less similar in its functionality to Unix "grep".
 Found words or the parts of words are colored in red.
+## Available LOCAL_VARIABLES
+All the local variables can be combined
+```
+IGNORE_CASE=1 -- search works in an insensitive case format
+FULL_WORDS=1 -- search returns matches with full words
+FULL_LINES=1 -- search returns matches with full lines
+INVERT_MATCH=1 -- search returns lines where match was not found
+MAX_OUTPUT=N -- search returns first N matched lines 
+```
 ## Usage
 To usage the utility navigate to the project directory and run the following command:
-```cargo run <search_item> <file_path>```
-There are also available 2 environment variables: ```FULL_WORDS``` and ```IGNORE_CASE```. Set them to 1, if you want them to be on.
+```your_local_variables(optional) cargo run <search_item> <file_path>```
 ## Examples
 poem.txt file:
 ```
