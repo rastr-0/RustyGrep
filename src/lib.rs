@@ -406,4 +406,21 @@ But I love rust!";
         assert_eq!(vec![(2, query.red().to_string())],
                    search_lines_case_sensitive(&query, &content, &params));
     }
+
+    #[test]
+    fn invert_match() {
+        let query = "safe, fast, productive.";
+        let content = "\
+Rust:
+safe, fast, productive.
+Pick three.";
+
+        let params = AdditionalParameters {
+            max_output: Some(u32::MAX),
+            invert_match: true
+        };
+
+        assert_eq!(vec![(1, "Rust:".to_string()), (3, "Pick three.".to_string())],
+                   search_case_sensitive(&query, &content, &params));
+    }
 }
