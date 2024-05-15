@@ -65,5 +65,5 @@ line: 13 | And both that morning equally lay
 - [X] Invert match
 - [X] Only full lines sensitivity
 - [ ] Basic regular expressions support
-- [ ] Find search items more than in 1 file at a time  
+- [ ] Async search of matches in more than 1 file  
 
